@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Habit Tracker</title>
+
+<style>
+
+body{
+font-family:Arial;
+background:#f6f2ff;
+margin:0;
+padding:20px;
+}
+
+.container{
+max-width:500px;
+margin:auto;
+}
+
+h1{
+text-align:center;
+color:#7257ff;
+}
+
+.card{
+background:white;
+padding:18px;
+border-radius:20px;
+margin:15px 0;
+box-shadow:0 5px 15px #ddd;
+}
+
+
+input{
+padding:12px;
+border-radius:12px;
+border:1px solid #ddd;
+width:65%;
+}
+
+
+button{
+padding:12px;
+border:none;
+border-radius:12px;
+background:#7257ff;
+color:white;
+}
+
+
+.habit{
+background:#fff;
+padding:15px;
+border-radius:18px;
+margin-top:15px;
+}
+
+
+.streak{
+color:#ff8c42;
+font-weight:bold;
+margin:10px 0;
+}
+
+
+.complete{
+background:#9be7b0 !important;
+}
+
+
+.today{
+padding:12px;
+border-radius:12px;
+background:#eee;
+text-align:center;
+}
+
+
+</style>
+
+</head>
+
+
+<body>
+
+
+<div class="container">
+
+
+<h1>🌱 Habit Tracker</h1>
+
+
+<div class="card">
+
+<input id="habitInput" placeholder="New habit">
+
+<button id="addBtn">Add</button>
+
+</div>
+
+
+<div class="card">
+
+<button id="loginBtn">
+Sign in with Google
+</button>
+
+</div>
+
+
+<div id="habits"></div>
+
+
+</div>
+
+
+
+
+
+<script type="module">
+
+
+import {initializeApp}
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+
+
+import {
+getFirestore,
+collection,
+addDoc,
+query,
+where,
+onSnapshot,
+doc,
+updateDoc
+}
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+
+import {
+getAuth,
+GoogleAuthProvider,
+signInWithPopup,
+onAuthStateChanged
+}
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+
+
+
+// FIREBASE CONFIG
+
+const firebaseConfig = {
+
+apiKey:"AIzaSyAMBt9ynXNFE4N2QjoqoZEVV3QqF8VRf8",
+
+authDomain:"habit-tracker-c220c.firebaseapp.com",
+
+projectId:"habit-tracker-c220c",
+
+storageBucket:"habit-tracker-c220c.firebasestorage.app",
+
+messagingSenderId:"949200336897",
+
+appId:"1:949200336897:web:49f8aab34bda6e53c06800",
+
+measurementId:"G-YHPSPWXTL5"
+
+};
+
+
+
+const app=initializeApp(firebaseConfig);
+
+const db=getFirestore(app);
+
+const auth=getAuth(app);
+
+
+let user=null;
+
+let habits=[];
+
+
+
+
+const provider=new GoogleAuthProvider();
+
+
+
+// LOGIN
+
+document
+.getElementById("loginBtn")
+.onclick=async()=>{
+
+
+try{
+
+let result=await signInWithPopup(
+auth,
+provider
+);
+
+
+alert(
+"Logged in: "+result.user.email
+);
+
+
+}
+
+catch(e){
+
+alert(
+"Login error: "+e.code
+);
+
+console.log(e);
+
+}
+
+
+};
+
+
+
+
+
+
+onAuthStateChanged(auth,u=>{
+
+user=u;
+
+if(user){
+
+loadHabits();
+
+}
+
+});
+
+
+
+
+
+
+
+function today(){
+
+return new Date()
+.toISOString()
+.split("T")[0];
+
+}
+
+
+
+
+
+
+
+// ADD HABIT
+
+
+document
+.getElementById("addBtn")
+.onclick=async()=>{
+
+
+let name=
+document
+.getElementById("habitInput")
+.value
+.trim();
+
+
+if(!name || !user)return;
+
+
+
+await addDoc(
+collection(db,"habits"),
+{
+
+uid:user.uid,
+
+name:name,
+
+history:{},
+
+streak:0
+
+});
+
+
+document
+.getElementById("habitInput")
+.value="";
+
+
+};
+
+
+
+
+
+
+
+
+
+function loadHabits(){
+
+
+let q=query(
+collection(db,"habits"),
+where("uid","==",user.uid)
+);
+
+
+
+onSnapshot(q,s=>{
+
+
+habits=[];
+
+
+s.forEach(d=>{
+
+
+habits.push({
+
+id:d.id,
+
+...d.data()
+
+});
+
+
+});
+
+
+render();
+
+
+});
+
+
+}
+
+
+
+
+
+
+
+
+async function toggleHabit(id){
+
+
+let h=
+habits.find(x=>x.id==id);
+
+
+let t=today();
+
+
+if(!h.history){
+
+h.history={};
+
+}
+
+
+
+h.history[t]=!h.history[t];
+
+
+
+let streak=0;
+
+
+let d=new Date();
+
+
+
+while(true){
+
+
+let key=
+d.toISOString()
+.split("T")[0];
+
+
+if(h.history[key]){
+
+
+streak++;
+
+
+d.setDate(
+d.getDate()-1
+);
+
+
+}
+
+else{
+
+break;
+
+}
+
+
+}
+
+
+
+await updateDoc(
+doc(db,"habits",id),
+{
+
+history:h.history,
+
+streak:streak
+
+});
+
+
+}
+
+
+
+
+
+
+
+
+
+function render(){
+
+
+let box=
+document.getElementById("habits");
+
+
+box.innerHTML="";
+
+
+
+habits.forEach(h=>{
+
+
+let done=
+h.history &&
+h.history[today()];
+
+
+
+box.innerHTML+=`
+
+
+<div class="habit">
+
+
+<h3>${h.name}</h3>
+
+
+<div class="streak">
+
+🔥 ${h.streak || 0} day streak
+
+</div>
+
+
+<div
+
+class="today ${done?'complete':''}"
+
+onclick="toggleHabit('${h.id}')"
+
+>
+
+${done?
+"Completed today ✓":
+"Tap to complete"}
+
+</div>
+
+
+</div>
+
+
+`;
+
+
+});
+
+
+}
+
+
+window.toggleHabit=toggleHabit;
+
+
+</script>
+
+
+</body>
+</html>
