@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Habit Tracker</title>
+
+<style>
+body {
+    font-family: Arial;
+    background:#f7f3ff;
+    margin:0;
+    padding:20px;
+}
+
+.container {
+    max-width:800px;
+    margin:auto;
+    background:white;
+    padding:20px;
+    border-radius:20px;
+}
+
+h1 {
+    text-align:center;
+    color:#7c5fd4;
+}
+
+.login {
+    text-align:center;
+    margin-top:60px;
+}
+
+button {
+    padding:10px 15px;
+    border:none;
+    border-radius:10px;
+    background:#b8e0d2;
+    cursor:pointer;
+}
+
+input {
+    padding:10px;
+    width:70%;
+    border-radius:10px;
+}
+
+.habit {
+    margin-top:15px;
+    padding:15px;
+    background:#fff7fb;
+    border-radius:15px;
+}
+
+.days {
+    display:grid;
+    grid-template-columns:repeat(7,1fr);
+    gap:5px;
+    margin-top:10px;
+}
+
+.day {
+    padding:10px;
+    background:#eee;
+    border-radius:8px;
+    text-align:center;
+    cursor:pointer;
+}
+
+.checked {
+    background:#c8f7c5;
+}
+
+.progress {
+    height:10px;
+    background:#eee;
+    border-radius:20px;
+    margin-top:10px;
+}
+
+.bar {
+    height:100%;
+    background:#a8dadc;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>🌱 Habit Tracker</h1>
+
+<!-- LOGIN -->
+<div id="loginBox" class="login">
+    <button onclick="login()">Sign in with Google</button>
+</div>
+
+<!-- APP -->
+<div id="app" style="display:none;">
+
+<p id="userEmail"></p>
+
+<input id="habitInput" placeholder="New habit"/>
+<button onclick="addHabit()">Add</button>
+<button onclick="logout()">Logout</button>
+
+<div id="habits"></div>
+
+</div>
+
+</div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import {
+    getFirestore,
+    collection,
+    addDoc,
+    onSnapshot,
+    doc,
+    updateDoc,
+    deleteDoc,
+    query,
+    where
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+import {
+    getAuth,
+    GoogleAuthProvider,
+    signInWithPopup,
+    signOut,
+    onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+/* 🔴 PASTE YOUR FIREBASE CONFIG HERE */
+const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+const days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+let user = null;
+let habits = [];
+
+/* LOGIN */
+window.login = async function () {
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider);
+};
+
+window.logout = async function () {
+    await signOut(auth);
+};
+
+/* AUTH STATE */
+onAuthStateChanged(auth, (u) => {
+    if (u) {
+        user = u;
+        document.getElementById("loginBox").style.display = "none";
+        document.getElementById("app").style.display = "block";
+        document.getElementById("userEmail").innerText = u.email;
+        listenHabits();
+    } else {
+        user = null;
+        document.getElementById("loginBox").style.display = "block";
+        document.getElementById("app").style.display = "none";
+    }
+});
+
+/* FIRESTORE LISTENER */
+function listenHabits() {
+    const q = query(
+        collection(db, "habits"),
+        where("uid", "==", user.uid)
+    );
+
+    onSnapshot(q, (snapshot) => {
+        habits = snapshot.docs.map(d => ({
+            id: d.id,
+            ...d.data()
+        }));
+        render();
+    });
+}
+
+/* ADD HABIT */
+window.addHabit = async function () {
+    let name = document.getElementById("habitInput").value.trim();
+    if (!name) return;
+
+    await addDoc(collection(db, "habits"), {
+        uid: user.uid,
+        name,
+        completed: [false,false,false,false,false,false,false]
+    });
+
+    document.getElementById("habitInput").value = "";
+};
+
+/* TOGGLE DAY */
+window.toggleDay = async function (id, index) {
+    let habit = habits.find(h => h.id === id);
+    habit.completed[index] = !habit.completed[index];
+
+    await updateDoc(doc(db, "habits", id), {
+        completed: habit.completed
+    });
+};
+
+/* DELETE */
+window.deleteHabit = async function (id) {
+    await deleteDoc(doc(db, "habits", id));
+};
+
+/* RENDER */
+function render() {
+    const box = document.getElementById("habits");
+    box.innerHTML = "";
+
+    habits.forEach(h => {
+        let done = h.completed.filter(x => x).length;
+        let percent = Math.round(done / 7 * 100);
+
+        box.innerHTML += `
+        <div class="habit">
+
+            <h3>${h.name}</h3>
+
+            <div class="days">
+                ${days.map((d,i)=>`
+                    <div class="day ${h.completed[i] ? 'checked' : ''}"
+                        onclick="toggleDay('${h.id}',${i})">
+                        ${d}
+                    </div>
+                `).join("")}
+            </div>
+
+            <div class="progress">
+                <div class="bar" style="width:${percent}%"></div>
+            </div>
+
+            <p>${percent}% complete</p>
+
+            <button onclick="deleteHabit('${h.id}')">Delete</button>
+
+        </div>
+        `;
+    });
+}
+
+</script>
+
+</body>
+</html>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
